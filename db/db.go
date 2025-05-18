@@ -5,16 +5,16 @@ import (
 	"log"
 )
 
-var db *sql.DB
+var DB *sql.DB
 
-func initDB() {
+func InitDB() {
 	var err error
 	connStr := "user=golang password=clave123 dbname=todos host=localhost sslmode=disable"
-	db, err = sql.Open("postgres", connStr)
+	DB, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal("Error abriendo conexión con PostgreSQL:", err)
 	}
-	err = db.Ping()
+	err = DB.Ping()
 	if err != nil {
 		log.Fatal("No se pudo conectar a la DB:", err)
 	}

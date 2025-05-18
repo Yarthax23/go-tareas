@@ -9,21 +9,21 @@ import (
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	"github.com/yarthax23/go-tareas/db"
+	h "github.com/yarthax23/go-tareas/handlers"
 )
 
 func main() {
-	initDB()
-	defer db.Close()
-
+	db.InitDB()
+	defer db.DB.Close()
 	r := mux.NewRouter()
 
 	// TAREAS Rutas básicas con métodos definidos
-	r.HandleFunc("/tareas", handleGetTasks).Methods("GET")
-	r.HandleFunc("/tareas/{id}", handleGetTask).Methods("GET")
-	r.HandleFunc("/tareas", handlePostTask).Methods("POST")
-	r.HandleFunc("/tareas/{id}", handlePutTask).Methods("PUT")
-	r.HandleFunc("/tareas/{id}", handlePatchTask).Methods("PATCH")
-	r.HandleFunc("/tareas/{id}", handleDeleteTask).Methods("DELETE")
+	r.HandleFunc("/tareas", h.GetTasks).Methods("GET")
+	r.HandleFunc("/tareas/{id}", h.GetTask).Methods("GET")
+	r.HandleFunc("/tareas", h.PostTask).Methods("POST")
+	r.HandleFunc("/tareas/{id}", h.PutTask).Methods("PUT")
+	r.HandleFunc("/tareas/{id}", h.PatchTask).Methods("PATCH")
+	r.HandleFunc("/tareas/{id}", h.DeleteTask).Methods("DELETE")
 
 	/* Ejemplos de uso
 	curl localhost:8080/tareas

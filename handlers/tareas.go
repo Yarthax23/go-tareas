@@ -8,33 +8,34 @@ import (
 	"strings"
 
 	"github.com/yarthax23/go-tareas/db"
-	"github.com/yarthax23/go-tareas/models"
+	m "github.com/yarthax23/go-tareas/models"
+	u "github.com/yarthax23/go-tareas/utils"
 )
 
-func handlePostTask(w http.ResponseWriter, r *http.Request) {
+func PostTask(w http.ResponseWriter, r *http.Request) {
 
-	var t Tarea
+	var t m.Tarea
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		writeError(w, http.StatusBadRequest, "Error al leer JSON")
+		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
 	insertarTarea(*t.Contenido, w)
 }
 
-func handleGetTasks(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, contenido, resuelto, fecha FROM tareas ORDER BY id ASC")
+func GetTasks(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.DB.Query("SELECT id, contenido, resuelto, fecha FROM tareas ORDER BY id ASC")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Error leyendo de DB")
+		u.WriteError(w, http.StatusInternalServerError, "Error leyendo de db.DB")
 		return
 	}
 	defer rows.Close()
 
-	var ts []models.Tarea
+	var ts []m.Tarea
 	for rows.Next() {
-		var t models.Tarea
+		var t m.Tarea
 		var fecha sql.NullTime
 		if err := rows.Scan(&t.ID, &t.Contenido, &t.Resuelto, &fecha); err != nil {
-			writeError(w, http.StatusInternalServerError, "Error leyendo fila")
+			u.WriteError(w, http.StatusInternalServerError, "Error leyendo fila")
 			return
 		}
 		if fecha.Valid {
@@ -43,46 +44,46 @@ func handleGetTasks(w http.ResponseWriter, r *http.Request) {
 		ts = append(ts, t)
 	}
 
-	writeJSON(w, http.StatusOK, ts)
+	u.WriteJSON(w, http.StatusOK, ts)
 }
 
-func handleGetTask(w http.ResponseWriter, r *http.Request) {
-	id, err := extraerID(r)
+func GetTask(w http.ResponseWriter, r *http.Request) {
+	id, err := u.ExtraerID(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "ID inválido")
+		u.WriteError(w, http.StatusBadRequest, "ID inválido")
 		return
 	}
 
-	var t models.Tarea
+	var t m.Tarea
 	var fecha sql.NullTime
-	row := db.QueryRow("SELECT id, contenido, resuelto, fecha FROM tareas WHERE id = $1", id)
+	row := db.DB.QueryRow("SELECT id, contenido, resuelto, fecha FROM tareas WHERE id = $1", id)
 	if err = row.Scan(&t.ID, &t.Contenido, &t.Resuelto, &fecha); err != nil {
-		writeError(w, http.StatusNotFound, "No se encontró la TAREA con ese ID")
+		u.WriteError(w, http.StatusNotFound, "No se encontró la TAREA con ese ID")
 		return
 	}
 	if fecha.Valid {
 		t.Fecha = &fecha.Time
 	}
-	writeJSON(w, http.StatusOK, t)
+	u.WriteJSON(w, http.StatusOK, t)
 }
 
-func handlePutTask(w http.ResponseWriter, r *http.Request) {
-	id, err := extraerID(r)
+func PutTask(w http.ResponseWriter, r *http.Request) {
+	id, err := u.ExtraerID(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "ID inválido")
+		u.WriteError(w, http.StatusBadRequest, "ID inválido")
 		return
 	}
 
 	// Leer el nuevo contenido (JSON esperado)
-	var t models.Tarea
+	var t m.Tarea
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
-		writeError(w, http.StatusBadRequest, "Error al leer JSON")
+		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
 
 	// Validación (con punteros)
 	if t.Contenido == nil || t.Resuelto == nil || t.Fecha == nil {
-		writeError(w, http.StatusBadRequest, "PUT requiere contenido, resuelto y fecha \n fecha ejemplo: (2025-5-25T12:25:52Z)")
+		u.WriteError(w, http.StatusBadRequest, "PUT requiere contenido, resuelto y fecha \n fecha ejemplo: (2025-5-25T12:25:52Z)")
 		return
 	}
 
@@ -98,58 +99,58 @@ func handlePutTask(w http.ResponseWriter, r *http.Request) {
 		WHERE id = $4
 	`
 	// Actualización completa
-	res, err := db.Exec(query, t.Contenido, t.Resuelto, t.Fecha, id)
-	if err != nil || afectadas(res) == 0 {
-		writeError(w, http.StatusInternalServerError, "Error actualizando tarea")
+	res, err := db.DB.Exec(query, t.Contenido, t.Resuelto, t.Fecha, id)
+	if err != nil || u.Afectadas(res) == 0 {
+		u.WriteError(w, http.StatusInternalServerError, "Error actualizando tarea")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	u.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"mensaje": "Tarea actualizada (PUT)",
 		"id":      id,
 	})
 }
 
-func handlePatchTask(w http.ResponseWriter, r *http.Request) {
-	id, err := extraerID(r)
+func PatchTask(w http.ResponseWriter, r *http.Request) {
+	id, err := u.ExtraerID(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "ID inválido")
+		u.WriteError(w, http.StatusBadRequest, "ID inválido")
 		return
 	}
 
 	datos, err := parseUpdateData(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Error al leer JSON")
+		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
 
 	query, args := buildUpdateQuery(id, datos)
-	res, err := db.Exec(query, args...)
-	if err != nil || afectadas(res) == 0 {
-		writeError(w, http.StatusInternalServerError, "Error al actualizar en la base de datos")
+	res, err := db.DB.Exec(query, args...)
+	if err != nil || u.Afectadas(res) == 0 {
+		u.WriteError(w, http.StatusInternalServerError, "Error al actualizar en la base de datos")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	u.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"mensaje": "Tarea editada (PATCH)",
 		"id":      id,
 	})
 }
 
-func handleDeleteTask(w http.ResponseWriter, r *http.Request) {
-	id, err := extraerID(r)
+func DeleteTask(w http.ResponseWriter, r *http.Request) {
+	id, err := u.ExtraerID(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "ID inválido")
+		u.WriteError(w, http.StatusBadRequest, "ID inválido")
 		return
 	}
 
-	res, err := db.Exec("DELETE FROM tareas WHERE id = $1", id)
-	if err != nil || afectadas(res) == 0 {
-		writeError(w, http.StatusInternalServerError, "Error al intentar borrar")
+	res, err := db.DB.Exec("DELETE FROM tareas WHERE id = $1", id)
+	if err != nil || u.Afectadas(res) == 0 {
+		u.WriteError(w, http.StatusInternalServerError, "Error al intentar borrar")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	u.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"mensaje": "Tarea borrada correctamente",
 		"id":      id,
 	})
@@ -157,18 +158,18 @@ func handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 
 func insertarTarea(contenido string, w http.ResponseWriter) {
 	var id int
-	err := db.QueryRow("INSERT INTO tareas (contenido) VALUES ($1) RETURNING id", contenido).Scan(&id)
+	err := db.DB.QueryRow("INSERT INTO tareas (contenido) VALUES ($1) RETURNING id", contenido).Scan(&id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Error guardando en la base de datos")
+		u.WriteError(w, http.StatusInternalServerError, "Error guardando en la base de datos")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	u.WriteJSON(w, http.StatusCreated, map[string]interface{}{
 		"mensaje": "Tarea recibida",
 		"id":      id,
 	})
 }
 
-func buildUpdateQuery(id int, datos *models.Tarea) (string, []interface{}) {
+func buildUpdateQuery(id int, datos *m.Tarea) (string, []interface{}) {
 	var campos []string
 	var args []interface{}
 	i := 1
@@ -195,8 +196,8 @@ func buildUpdateQuery(id int, datos *models.Tarea) (string, []interface{}) {
 }
 
 // Recibe el cuerpo de la petición (r.Body) y devuelve map con los campos permitidos
-func parseUpdateData(r *http.Request) (*models.Tarea, error) {
-	var t models.Tarea
+func parseUpdateData(r *http.Request) (*m.Tarea, error) {
+	var t m.Tarea
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		return nil, fmt.Errorf("error decodificando JSON: %w", err)
 	}
