@@ -1,0 +1,16 @@
+# binarios
+*.exe
+*.out
+*.o
+
+# dependencias
+vendor/
+
+# directorios del sistema
+.DS_Store
+.idea/
+.vscode/
+
+# build de Go
+/go-tareas
+tareas-frontend/
