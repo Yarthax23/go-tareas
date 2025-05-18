@@ -1,9 +1,14 @@
-package main
+package handlers
 
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
+
+	"github.com/yarthax23/go-tareas/db"
+	"github.com/yarthax23/go-tareas/models"
 )
 
 func handlePostTask(w http.ResponseWriter, r *http.Request) {
@@ -24,9 +29,9 @@ func handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var ts []Tarea
+	var ts []models.Tarea
 	for rows.Next() {
-		var t Tarea
+		var t models.Tarea
 		var fecha sql.NullTime
 		if err := rows.Scan(&t.ID, &t.Contenido, &t.Resuelto, &fecha); err != nil {
 			writeError(w, http.StatusInternalServerError, "Error leyendo fila")
@@ -48,7 +53,7 @@ func handleGetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var t Tarea
+	var t models.Tarea
 	var fecha sql.NullTime
 	row := db.QueryRow("SELECT id, contenido, resuelto, fecha FROM tareas WHERE id = $1", id)
 	if err = row.Scan(&t.ID, &t.Contenido, &t.Resuelto, &fecha); err != nil {
@@ -69,7 +74,7 @@ func handlePutTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Leer el nuevo contenido (JSON esperado)
-	var t Tarea
+	var t models.Tarea
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		writeError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
@@ -148,4 +153,57 @@ func handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 		"mensaje": "Tarea borrada correctamente",
 		"id":      id,
 	})
+}
+
+func insertarTarea(contenido string, w http.ResponseWriter) {
+	var id int
+	err := db.QueryRow("INSERT INTO tareas (contenido) VALUES ($1) RETURNING id", contenido).Scan(&id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Error guardando en la base de datos")
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"mensaje": "Tarea recibida",
+		"id":      id,
+	})
+}
+
+func buildUpdateQuery(id int, datos *models.Tarea) (string, []interface{}) {
+	var campos []string
+	var args []interface{}
+	i := 1
+
+	if datos.Contenido != nil {
+		campos = append(campos, fmt.Sprintf("contenido = $%d", i))
+		args = append(args, *datos.Contenido)
+		i++
+	}
+	if datos.Fecha != nil {
+		campos = append(campos, fmt.Sprintf("fecha = $%d", i))
+		args = append(args, *datos.Fecha)
+		i++
+	}
+	if datos.Resuelto != nil {
+		campos = append(campos, fmt.Sprintf("resuelto = $%d", i))
+		args = append(args, *datos.Resuelto)
+		i++
+	}
+
+	args = append(args, id)
+	query := fmt.Sprintf("UPDATE tareas SET %s WHERE id = $%d", strings.Join(campos, ", "), i)
+	return query, args
+}
+
+// Recibe el cuerpo de la petición (r.Body) y devuelve map con los campos permitidos
+func parseUpdateData(r *http.Request) (*models.Tarea, error) {
+	var t models.Tarea
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		return nil, fmt.Errorf("error decodificando JSON: %w", err)
+	}
+
+	if t.Contenido == nil && t.Fecha == nil && t.Resuelto == nil {
+		return nil, fmt.Errorf("no se recibió ningún campo para actualizar")
+	}
+
+	return &t, nil
 }

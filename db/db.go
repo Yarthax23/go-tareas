@@ -1,0 +1,22 @@
+package db
+
+import (
+	"database/sql"
+	"log"
+)
+
+var db *sql.DB
+
+func initDB() {
+	var err error
+	connStr := "user=golang password=clave123 dbname=todos host=localhost sslmode=disable"
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal("Error abriendo conexión con PostgreSQL:", err)
+	}
+	err = db.Ping()
+	if err != nil {
+		log.Fatal("No se pudo conectar a la DB:", err)
+	}
+	log.Println("✅ Conectado a la base de datos PostgreSQL")
+}

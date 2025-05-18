@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"database/sql"
@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/yarthax23/go-tareas/models"
 )
 
 // --- FUNCIONES AUXILIARES --- //
@@ -34,19 +35,6 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-func insertarTarea(contenido string, w http.ResponseWriter) {
-	var id int
-	err := db.QueryRow("INSERT INTO tareas (contenido) VALUES ($1) RETURNING id", contenido).Scan(&id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Error guardando en la base de datos")
-		return
-	}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"mensaje": "Tarea recibida",
-		"id":      id,
-	})
-}
-
 func afectadas(res sql.Result) int64 {
 	n, _ := res.RowsAffected()
 	return n
@@ -57,7 +45,7 @@ func extraerID(r *http.Request) (int, error) {
 	return strconv.Atoi(vars["id"])
 }
 
-func buildUpdateQuery(id int, datos *Tarea) (string, []interface{}) {
+func buildUpdateQuery(id int, datos *models.Tarea) (string, []interface{}) {
 	var campos []string
 	var args []interface{}
 	i := 1
@@ -84,8 +72,8 @@ func buildUpdateQuery(id int, datos *Tarea) (string, []interface{}) {
 }
 
 // Recibe el cuerpo de la petición (r.Body) y devuelve map con los campos permitidos
-func parseUpdateData(r *http.Request) (*Tarea, error) {
-	var t Tarea
+func parseUpdateData(r *http.Request) (*models.Tarea, error) {
+	var t models.Tarea
 	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
 		return nil, fmt.Errorf("error decodificando JSON: %w", err)
 	}
