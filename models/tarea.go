@@ -11,6 +11,7 @@ type Tarea struct {
 }
 
 /*type TareaPut struct {
+	ID        *int       `json:"id"`
 	Contenido string    `json:"contenido"`
 	Resuelto  bool      `json:"resuelto"`
 	Fecha     time.Time `json:"fecha"`

@@ -1,4 +1,4 @@
-//11 Usar HTML React
+//11 Agregar otro recurso
 
 package main
 
@@ -19,38 +19,32 @@ func main() {
 
 	// TAREAS Rutas básicas con métodos definidos
 	r.HandleFunc("/tareas", h.GetTasks).Methods("GET")
-	r.HandleFunc("/tareas/{id}", h.GetTask).Methods("GET")
 	r.HandleFunc("/tareas", h.PostTask).Methods("POST")
+	r.HandleFunc("/tareas/{id}", h.GetTask).Methods("GET")
 	r.HandleFunc("/tareas/{id}", h.PutTask).Methods("PUT")
 	r.HandleFunc("/tareas/{id}", h.PatchTask).Methods("PATCH")
 	r.HandleFunc("/tareas/{id}", h.DeleteTask).Methods("DELETE")
 
+	// USUARIOS Rutas básicas con métodos definidos
+	r.HandleFunc("/usuarios", h.GetUsuarios).Methods("GET")
+	r.HandleFunc("/usuarios", h.PostUsuario).Methods("POST")
+	r.HandleFunc("/usuarios/{id}", h.GetUsuario).Methods("GET")
+	r.HandleFunc("/usuarios/{id}", h.PutUsuario).Methods("PUT")
+	r.HandleFunc("/usuarios/{id}", h.PatchUsuario).Methods("PATCH")
+	r.HandleFunc("/usuarios/{id}", h.DeleteUsuario).Methods("DELETE")
 	/* Ejemplos de uso
 	curl localhost:8080/tareas
 	curl localhost:8080/tareas/2				--formato json
 	curl localhost:8080/tareas/2 | jq			--formato coloreado
 	curl localhost:8080/tareas -X POST \
-		-H "Content-Type: application/json" \
 		-d '{"contenido" : "Ejemplo"}'
 	curl localhost:8080/tareas/2 -X PATCH \
-		-H "Content-Type: application/json" \
-		-d '{"contenido" : "Ejemplo"}'
+		-d '{"contenido" : "Ejemplo"
+		"resuelto" :  true, "fecha" : "2025-05-25T12:30:30Z"}'
 	curl localhost:8080/tareas/2 -X DELETE
 	*/
 
-	/* USUARIOS
-
-	GET /usuarios → listar todos
-
-	GET /usuarios/{id} → ver uno
-
-	POST /usuarios → crear nuevo
-
-	PUT /usuarios/{id} → reemplazar
-
-	DELETE /usuarios/{id} → borrar
-
-	Tareas por usuario
+	/* Tareas por usuario ???
 
 	GET /usuarios/{id}/tareas → ver tareas de un usuario
 

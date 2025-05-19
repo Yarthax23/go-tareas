@@ -16,15 +16,15 @@ var modoDesarrollo bool = false
 func WriteJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if modoDesarrollo {
+	if !modoDesarrollo {
+		json.NewEncoder(w).Encode(data)
+	} else {
 		jsonData, err := json.MarshalIndent(data, "", " ")
 		if err != nil {
 			WriteError(w, http.StatusInternalServerError, "Error generando JSON")
 			return
 		}
 		w.Write(jsonData)
-	} else {
-		json.NewEncoder(w).Encode(data)
 	}
 }
 
