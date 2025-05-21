@@ -12,23 +12,31 @@ import (
 )
 
 func PostUsuario(w http.ResponseWriter, r *http.Request) {
-	var user m.Usuario
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	var input m.UsuarioPost
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
 
+	// Validar
+	if errores := u.ValidarStruct(input); errores != nil {
+		u.WriteJSON(w, http.StatusBadRequest, errores)
+		return
+	}
+
+	// Crear el usuario
 	query := `
 	INSERT INTO usuarios 
 	(nombre, email) VALUES ($1, $2) RETURNING id
 	`
 	var id int
-	if err := db.DB.QueryRow(query, *user.Nombre, *user.Email).Scan(&id); err != nil {
+	if err := db.DB.QueryRow(query, *input.Nombre, *input.Email).Scan(&id); err != nil {
 		u.WriteError(w, http.StatusInternalServerError, "Error guardando en la database")
 		return
 	}
 
-	fmt.Fprintf(w, "Hola %s!\nTe doy la bienvenida!\n", *user.Nombre)
+	u.WriteJSON(w, http.StatusOK, input)
+	fmt.Fprintf(w, "Hola %s!\nTe doy la bienvenida!\n", *input.Nombre)
 }
 
 func GetUsuario(w http.ResponseWriter, r *http.Request) {
@@ -44,12 +52,12 @@ func GetUsuario(w http.ResponseWriter, r *http.Request) {
 	`
 	row := db.DB.QueryRow(query, id)
 
-	var user m.Usuario
-	if err = row.Scan(&user.ID, &user.Nombre, &user.Email); err != nil {
+	var input m.UsuarioResponse
+	if err = row.Scan(&input.ID, &input.Nombre, &input.Email); err != nil {
 		u.WriteError(w, http.StatusNotFound, "No se encontró el usuario con ese ID")
 		return
 	}
-	u.WriteJSON(w, http.StatusOK, user)
+	u.WriteJSON(w, http.StatusOK, input)
 }
 
 func GetUsuarios(w http.ResponseWriter, r *http.Request) {
@@ -64,18 +72,18 @@ func GetUsuarios(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var users []m.Usuario
+	var inputs []m.UsuarioResponse
 	for rows.Next() {
-		var user m.Usuario
-		if err := rows.Scan(&user.ID, &user.Nombre, &user.Email); err != nil {
+		var input m.UsuarioResponse
+		if err := rows.Scan(&input.ID, &input.Nombre, &input.Email); err != nil {
 			u.WriteError(w, http.StatusInternalServerError, "Error leyendo fila")
 			return
 		}
 
-		users = append(users, user)
+		inputs = append(inputs, input)
 
 	}
-	u.WriteJSON(w, http.StatusOK, users)
+	u.WriteJSON(w, http.StatusOK, inputs)
 }
 
 func PutUsuario(w http.ResponseWriter, r *http.Request) {
@@ -85,15 +93,22 @@ func PutUsuario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user m.Usuario
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	var input m.UsuarioPut
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
 
 	// Validación
-	if user.Nombre == nil || user.Email == nil {
+	/*if input.Nombre == nil || input.Email == nil {
 		u.WriteError(w, http.StatusBadRequest, "PUT requiere nombre y email")
+		return
+	}*/
+	if errores := u.ValidarStruct(input); errores != nil {
+		u.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"mensaje": "Error de validación",
+			"errores": errores,
+		})
 		return
 	}
 
@@ -102,14 +117,14 @@ func PutUsuario(w http.ResponseWriter, r *http.Request) {
 		SET nombre = $1, email = $2
 		WHERE id = $3
 	`
-	res, err := db.DB.Exec(query, user.Nombre, user.Email, id)
+	res, err := db.DB.Exec(query, input.Nombre, input.Email, id)
 	if err != nil || u.Afectadas(res) == 0 {
 		u.WriteError(w, http.StatusInternalServerError, "Error actualizando usuario")
 		return
 	}
 
 	u.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"mensaje": "Usuario actualizado (PUT)",
+		"mensaje": "Usuario reemplazado",
 		"id":      id,
 	})
 }
@@ -121,14 +136,20 @@ func PatchUsuario(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//Parseo
-	var user m.Usuario
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+	// Parseo
+	var input m.UsuarioPatch
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
-	if user.Nombre == nil && user.Email == nil {
+
+	// Validacion
+	/*if input.Nombre == nil && input.Email == nil {
 		u.WriteError(w, http.StatusBadRequest, "Error al actualizar, escriba nombre o email")
+		return
+	}*/
+	if errores := u.ValidarStruct(input); errores != nil {
+		u.WriteJSON(w, http.StatusBadRequest, errores)
 		return
 	}
 
@@ -137,18 +158,18 @@ func PatchUsuario(w http.ResponseWriter, r *http.Request) {
 	var args []interface{}
 	var i int = 1
 
-	if user.Nombre != nil {
+	if input.Nombre != nil {
 		campos = append(campos, fmt.Sprintf("nombre = $%d", i))
-		args = append(args, *user.Nombre)
+		args = append(args, *input.Nombre)
 		i++
 	}
-	if user.Email != nil {
+	if input.Email != nil {
 		campos = append(campos, fmt.Sprintf("email = $%d", i))
-		args = append(args, *user.Email)
+		args = append(args, *input.Email)
 		i++
 	}
 
-	query := fmt.Sprintf("UPDATE usuarios SET %s WHERE id = $%d", strings.Join(campos, ", "), id)
+	query := fmt.Sprintf("UPDATE usuarios SET %s WHERE id = $%d", strings.Join(campos, ", "), i)
 	args = append(args, id)
 
 	res, err := db.DB.Exec(query, args...)
@@ -158,7 +179,7 @@ func PatchUsuario(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"mensaje": "Usuario actualizado (PUT)",
+		"mensaje": "Usuario actualizado parcialmente",
 		"id":      id,
 	})
 }

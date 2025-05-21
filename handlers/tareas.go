@@ -14,12 +14,41 @@ import (
 
 func PostTask(w http.ResponseWriter, r *http.Request) {
 
-	var task m.Tarea
+	var task m.TareaPOST
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
+
+	// Validar
+	if errores := u.ValidarStruct(task); errores != nil {
+		u.WriteJSON(w, http.StatusBadRequest, errores)
+		return
+	}
+
+	// Crear la tarea
 	insertarTarea(*task.Contenido, w)
+}
+
+func GetTask(w http.ResponseWriter, r *http.Request) {
+	id, err := u.ExtraerID(r)
+	if err != nil {
+		u.WriteError(w, http.StatusBadRequest, "ID inválido")
+		return
+	}
+
+	row := db.DB.QueryRow("SELECT id, contenido, resuelto, fecha FROM tareas WHERE id = $1", id)
+
+	var task m.TareaResponse
+	var fecha sql.NullTime
+	if err = row.Scan(&task.ID, &task.Contenido, &task.Resuelto, &fecha); err != nil {
+		u.WriteError(w, http.StatusNotFound, "No se encontró la TAREA con ese ID")
+		return
+	}
+	if fecha.Valid {
+		task.Fecha = fecha.Time
+	}
+	u.WriteJSON(w, http.StatusOK, task)
 }
 
 func GetTasks(w http.ResponseWriter, r *http.Request) {
@@ -30,41 +59,21 @@ func GetTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var tasks []m.Tarea
+	var tasks []m.TareaResponse
 	for rows.Next() {
-		var task m.Tarea
+		var task m.TareaResponse
 		var fecha sql.NullTime
 		if err := rows.Scan(&task.ID, &task.Contenido, &task.Resuelto, &fecha); err != nil {
 			u.WriteError(w, http.StatusInternalServerError, "Error leyendo fila")
 			return
 		}
 		if fecha.Valid {
-			task.Fecha = &fecha.Time
+			task.Fecha = fecha.Time
 		}
 		tasks = append(tasks, task)
 	}
 
 	u.WriteJSON(w, http.StatusOK, tasks)
-}
-
-func GetTask(w http.ResponseWriter, r *http.Request) {
-	id, err := u.ExtraerID(r)
-	if err != nil {
-		u.WriteError(w, http.StatusBadRequest, "ID inválido")
-		return
-	}
-
-	var task m.Tarea
-	var fecha sql.NullTime
-	row := db.DB.QueryRow("SELECT id, contenido, resuelto, fecha FROM tareas WHERE id = $1", id)
-	if err = row.Scan(&task.ID, &task.Contenido, &task.Resuelto, &fecha); err != nil {
-		u.WriteError(w, http.StatusNotFound, "No se encontró la TAREA con ese ID")
-		return
-	}
-	if fecha.Valid {
-		task.Fecha = &fecha.Time
-	}
-	u.WriteJSON(w, http.StatusOK, task)
 }
 
 func PutTask(w http.ResponseWriter, r *http.Request) {
@@ -75,23 +84,30 @@ func PutTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Leer el nuevo contenido (JSON esperado)
-	var task m.Tarea
+	var task m.TareaPUT
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
 
-	// Validación (con punteros)
+	/*// Validación (con punteros)
 	if task.Contenido == nil || task.Resuelto == nil || task.Fecha == nil {
 		u.WriteError(w, http.StatusBadRequest, "PUT requiere contenido, resuelto y fecha \n fecha ejemplo: (2025-5-25T12:25:52Z)")
 		return
-	}
+	}*/
 
 	/*// Validación (sin punteros)
 	if strings.TrimSpace(task.Contenido) == "" || task.Fecha.IsZero() {
 		u.WriteError(w, http.StatusBadRequest, "PUT requiere contenido, resuelto y fecha")
 		return
 	}*/
+	if errores := u.ValidarStruct(task); errores != nil {
+		u.WriteJSON(w, http.StatusBadRequest, map[string]interface{}{
+			"mensaje": "Error de validación",
+			"errores": errores,
+		})
+		return
+	}
 
 	query := `
 		UPDATE tareas
@@ -106,7 +122,7 @@ func PutTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	u.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"mensaje": "Tarea actualizada (PUT)",
+		"mensaje": "Tarea reemplazada",
 		"id":      id,
 	})
 }
@@ -118,13 +134,19 @@ func PatchTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	datos, err := parseUpdateData(r)
+	task, err := parseUpdateData(r)
 	if err != nil {
 		u.WriteError(w, http.StatusBadRequest, "Error al leer JSON")
 		return
 	}
 
-	query, args := buildUpdateQuery(id, datos)
+	// Validación
+	if errores := u.ValidarStruct(task); errores != nil {
+		u.WriteJSON(w, http.StatusBadRequest, errores)
+		return
+	}
+
+	query, args := buildUpdateQuery(id, task)
 	res, err := db.DB.Exec(query, args...)
 	if err != nil || u.Afectadas(res) == 0 {
 		u.WriteError(w, http.StatusInternalServerError, "Error al actualizar en la base de datos")
@@ -169,7 +191,7 @@ func insertarTarea(contenido string, w http.ResponseWriter) {
 	})
 }
 
-func buildUpdateQuery(id int, datos *m.Tarea) (string, []interface{}) {
+func buildUpdateQuery(id int, datos *m.TareaPATCH) (string, []interface{}) {
 	var campos []string
 	var args []interface{}
 	i := 1
@@ -196,8 +218,8 @@ func buildUpdateQuery(id int, datos *m.Tarea) (string, []interface{}) {
 }
 
 // Recibe el cuerpo de la petición (r.Body) y devuelve map con los campos permitidos
-func parseUpdateData(r *http.Request) (*m.Tarea, error) {
-	var task m.Tarea
+func parseUpdateData(r *http.Request) (*m.TareaPATCH, error) {
+	var task m.TareaPATCH
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		return nil, fmt.Errorf("error decodificando JSON: %w", err)
 	}

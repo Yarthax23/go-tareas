@@ -18,5 +18,5 @@ func InitDB() {
 	if err != nil {
 		log.Fatal("No se pudo conectar a la DB:", err)
 	}
-	log.Println("✅ Conectado a la base de datos PostgreSQL")
+	log.Println("✅ Conectado a la base de datos 'todos', PostgreSQL")
 }
